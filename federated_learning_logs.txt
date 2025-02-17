@@ -1,0 +1,110 @@
+
+Federated Learning with 3 Users:
+User 1 Accuracy: 79.31%
+User 2 Accuracy: 78.67%
+User 3 Accuracy: 78.22%
+Final Aggregated Model Accuracy: 80.77
+==================================================
+
+Federated Learning with 5 Users:
+User 1 Accuracy: 77.19%
+User 2 Accuracy: 77.08%
+User 3 Accuracy: 76.90%
+User 4 Accuracy: 75.81%
+User 5 Accuracy: 77.35%
+Final Aggregated Model Accuracy: 80.11
+==================================================
+
+Federated Learning with 7 Users:
+User 1 Accuracy: 74.62%
+User 2 Accuracy: 73.53%
+User 3 Accuracy: 76.95%
+User 4 Accuracy: 75.12%
+User 5 Accuracy: 73.85%
+User 6 Accuracy: 74.19%
+User 7 Accuracy: 74.77%
+Final Aggregated Model Accuracy: 79.63
+==================================================
+
+Federated Learning with 9 Users:
+User 1 Accuracy: 73.00%
+User 2 Accuracy: 73.05%
+User 3 Accuracy: 72.86%
+User 4 Accuracy: 74.99%
+User 5 Accuracy: 72.07%
+User 6 Accuracy: 72.79%
+User 7 Accuracy: 72.02%
+User 8 Accuracy: 71.91%
+User 9 Accuracy: 75.25%
+Final Aggregated Model Accuracy: 79.47
+==================================================
+
+Federated Learning with 11 Users:
+User 1 Accuracy: 74.67%
+User 2 Accuracy: 69.02%
+User 3 Accuracy: 70.88%
+User 4 Accuracy: 72.55%
+User 5 Accuracy: 73.85%
+User 6 Accuracy: 71.41%
+User 7 Accuracy: 70.90%
+User 8 Accuracy: 72.39%
+User 9 Accuracy: 70.16%
+User 10 Accuracy: 70.56%
+User 11 Accuracy: 72.44%
+Final Aggregated Model Accuracy: 80.16
+==================================================
+
+Federated Learning with 3 Users:
+User 1 Accuracy: 77.35%
+User 2 Accuracy: 77.45%
+User 3 Accuracy: 77.11%
+Final Aggregated Model Accuracy: 79.76
+==================================================
+
+Federated Learning with 5 Users:
+User 1 Accuracy: 73.87%
+User 2 Accuracy: 74.88%
+User 3 Accuracy: 74.96%
+User 4 Accuracy: 74.06%
+User 5 Accuracy: 74.48%
+Final Aggregated Model Accuracy: 78.65
+==================================================
+
+Federated Learning with 7 Users:
+User 1 Accuracy: 72.36%
+User 2 Accuracy: 71.30%
+User 3 Accuracy: 72.04%
+User 4 Accuracy: 72.57%
+User 5 Accuracy: 72.55%
+User 6 Accuracy: 72.71%
+User 7 Accuracy: 72.15%
+Final Aggregated Model Accuracy: 77.40
+==================================================
+
+Federated Learning with 9 Users:
+User 1 Accuracy: 70.82%
+User 2 Accuracy: 68.22%
+User 3 Accuracy: 70.37%
+User 4 Accuracy: 70.58%
+User 5 Accuracy: 70.72%
+User 6 Accuracy: 71.51%
+User 7 Accuracy: 71.51%
+User 8 Accuracy: 71.09%
+User 9 Accuracy: 70.32%
+Final Aggregated Model Accuracy: 76.58
+==================================================
+
+Federated Learning with 11 Users:
+User 1 Accuracy: 69.44%
+User 2 Accuracy: 67.61%
+User 3 Accuracy: 68.62%
+User 4 Accuracy: 67.88%
+User 5 Accuracy: 69.58%
+User 6 Accuracy: 68.33%
+User 7 Accuracy: 70.16%
+User 8 Accuracy: 68.59%
+User 9 Accuracy: 69.68%
+User 10 Accuracy: 68.54%
+User 11 Accuracy: 67.35%
+Final Aggregated Model Accuracy: 76.34
+==================================================
