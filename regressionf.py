@@ -2,16 +2,18 @@ import numpy as np
 from scipy.sparse import vstack, csr_matrix
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import LabelEncoder
 import pickle
 import time
+import joblib
+import os
 
 # Global parameters
 user_configs = [3, 5, 7, 9, 11]
-log_file = "federated_learning_logs.txt"
+log_file = "federated_learning_logs_rg.txt"
 
 # Function to write logs to a file
 def write_log(message):
@@ -22,33 +24,59 @@ def write_log(message):
 def model_info(model):
     print("\n=== Model Information ===")
     print(f"Classes: {model.classes_}")
-    print(f"Feature Count Shape: {model.feature_count_.shape}")
-    print(f"Class Counts: {model.class_count_}\n")
+    print(f"Coefficients shape: {model.coef_.shape}")
+    print(f"Intercept: {model.intercept_}")
+    print(f"Number of iterations: {model.n_iter_}")
+    print(f"Solver: {model.solver}\n")
 
 # Function to train a user model
-def train_user_model(X_user, y_user):
-    model = MultinomialNB()
-    model.classes_ = np.unique(y_train)  # Ensure all users have consistent class labels
+def train_user_model(X_user, y_user, all_classes=np.arange(20)):
+    unique_classes = np.unique(y_user)
+    missing_classes = np.setdiff1d(all_classes, unique_classes)
+    
+    if len(missing_classes) > 0:
+        # Add 1 fake sample per missing class with all zeros
+        n_features = X_user.shape[1]
+        X_dummy = np.zeros((len(missing_classes), n_features))
+        y_dummy = missing_classes
+        # Stack the real and dummy data
+        X_user = np.vstack([X_user, X_dummy])
+        y_user = np.hstack([y_user, y_dummy])
+    
+    model = LogisticRegression(max_iter=1000, solver='saga', multi_class='multinomial')
     model.fit(X_user, y_user)
     return model
 
 # Function to save model parameters
 def save_model_params(model, filename):
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'class_count': model.class_count_,
-            'feature_count': model.feature_count_,
-            'class_log_prior': model.class_log_prior_
-        }, f)
+    os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
+    joblib.dump(model, filename)
 
-# Function to perform Federated Learning with FedAvg
+# Function to extract model parameters
+def extract_model_params(model):
+    return {
+        'coef': model.coef_,
+        'intercept': model.intercept_,
+        'classes': model.classes_
+    }
+
+# Function to get one sample per class
+def get_one_sample_per_class(X, y, num_classes=20):
+    indices = []
+    for c in range(num_classes):
+        idx = np.where(y == c)[0]
+        if len(idx) > 0:
+            indices.append(idx[0])
+    return X[indices], y[indices]
+
+# Function to perform Federated Learning with FedAvg for Logistic Regression
+# Modify the function to initialize global model with correct number of classes (20)
 def federated_learning(num_users):
     print(f"\n{'='*50}")
     print(f"Starting Federated Learning with {num_users} users")
     print(f"{'='*50}")
     
-    # Split data among users (keeping sparse matrix format)
-    # First convert to array indices to split
+    # Split data among users
     indices = np.arange(X_train.shape[0])
     user_indices = np.array_split(indices, num_users)
     
@@ -57,7 +85,7 @@ def federated_learning(num_users):
     
     # Train individual models
     for i in range(num_users):
-        print(f"\nTraining User {i + 1}/{num_users} on Naive Bayes model...")
+        print(f"\nTraining User {i + 1}/{num_users} on Logistic Regression model...")
         
         # Extract user data using indices
         X_user = X_train[user_indices[i]]
@@ -80,38 +108,41 @@ def federated_learning(num_users):
         user_accuracies.append(accuracy)
         
         # Save model parameters
-        save_model_params(model, f"user_{i+1}_model_params.pkl")
+        save_model_params(model, f"models/user_{i+1}_lr_model.joblib")
     
-    # Aggregation Step - FedAvg for Naive Bayes
-    print("\nAggregating Naive Bayes Models (FedAvg)...")
+    # Aggregation Step - FedAvg for Logistic Regression
+    print("\nAggregating Logistic Regression Models (FedAvg)...")
     
-    # Initialize aggregated parameters
+    # Initialize parameters for the global model
+    num_classes = 20  # Set to 20 (or len(np.unique(y_train)))
     num_features = X_train.shape[1]
-    num_classes = len(np.unique(y_train))
     
-    # Initialize with zeros
-    agg_class_count = np.zeros(num_classes)
-    agg_feature_count = np.zeros((num_classes, num_features))
+    # Create global model
+    global_model = LogisticRegression(max_iter=1000, solver='saga', multi_class='multinomial')
+    
+    # Initialize global model with a dummy fit to set up the model correctly
+    X_init, y_init = get_one_sample_per_class(X_train, y_train, num_classes=20)
+    global_model.fit(X_init, y_init)
+    
+    # Extract the coefficient shapes for later aggregation
+    global_coef = np.zeros((num_classes, num_features))
+    global_intercept = np.zeros(num_classes)
     
     # Weight factors (based on data size)
     total_samples = X_train.shape[0]
     weights = [len(user_indices[i]) / total_samples for i in range(num_users)]
     
     # Weighted averaging of parameters
-    for i in range(num_users):
-        agg_class_count += weights[i] * user_models[i].class_count_
-        agg_feature_count += weights[i] * user_models[i].feature_count_
+    for i, model in enumerate(user_models):
+        if model.coef_.shape[0] == num_classes:  # Check if the number of classes matches
+            global_coef += weights[i] * model.coef_
+            global_intercept += weights[i] * model.intercept_
+        else:
+            print(f"Skipping model {i + 1} due to shape mismatch: {model.coef_.shape} vs {global_coef.shape}")
     
-    # Create global model
-    global_model = MultinomialNB()
-    # Create a properly initialized model with all classes
-    global_model.classes_ = np.unique(y_train)
-    global_model.class_count_ = agg_class_count
-    global_model.feature_count_ = agg_feature_count
-    
-    # Recalculate class log prior and feature log prob
-    global_model._update_class_log_prior()
-    global_model._update_feature_log_prob(global_model.alpha)
+    # Set the aggregated parameters to the global model
+    global_model.coef_ = global_coef
+    global_model.intercept_ = global_intercept
     
     # Evaluate global model
     global_preds = global_model.predict(X_test)
@@ -126,10 +157,10 @@ def federated_learning(num_users):
     model_info(global_model)
     
     # Save global model parameters
-    save_model_params(global_model, f"global_model_params_{num_users}_users.pkl")
+    save_model_params(global_model, f"models/global_lr_model_{num_users}_users.joblib")
     
     # Logging
-    write_log(f"\nFederated Learning with {num_users} Users:")
+    write_log(f"\nFederated Learning with Logistic Regression - {num_users} Users:")
     for i in range(num_users):
         write_log(f"User {i + 1} Accuracy: {user_accuracies[i] * 100:.2f}%")
     write_log(f"Final Aggregated Model Accuracy: {global_accuracy * 100:.2f}%")
@@ -137,7 +168,7 @@ def federated_learning(num_users):
     
     return global_model, global_accuracy
 
-# Alternative FL algorithm - FedProx (with proximal term)
+# Alternative FL algorithm - FedProx for Logistic Regression
 def federated_learning_prox(num_users, mu=0.01):
     print(f"\n{'='*50}")
     print(f"Starting FedProx Learning with {num_users} users (mu={mu})")
@@ -148,20 +179,21 @@ def federated_learning_prox(num_users, mu=0.01):
     user_indices = np.array_split(indices, num_users)
     
     # Initialize a global model
-    global_model = MultinomialNB()
-    global_model.fit(X_train, y_train)
+    global_model = LogisticRegression(max_iter=100, solver='saga', random_state=42)
+    global_model.fit(X_train[:100], y_train[:100])
     
     # Save initial global parameters
-    global_feature_count = global_model.feature_count_.copy()
-    
-    user_models = []
-    user_accuracies = []
+    global_coef = global_model.coef_.copy()
+    global_intercept = global_model.intercept_.copy()
     
     # Number of communication rounds
     rounds = 3
     
     for round in range(rounds):
         print(f"\n--- Round {round+1}/{rounds} ---")
+        
+        user_models = []
+        user_accuracies = []
         
         # Train individual models (with proximal term)
         for i in range(num_users):
@@ -171,66 +203,58 @@ def federated_learning_prox(num_users, mu=0.01):
             X_user = X_train[user_indices[i]]
             y_user = y_train[user_indices[i]]
             
-            # Train model
-            model = MultinomialNB()
-            model.fit(X_user, y_user)
+            # For FedProx, we need to incorporate the proximal term in the objective
+            # In scikit-learn, we can't directly modify the objective
+            # So we'll train normally and then apply regularization towards the global model
             
-            # Apply proximal term (simplified approach for NB)
-            # This is a simplified approximation of the proximal term concept
-            model.feature_count_ = (model.feature_count_ + mu * global_feature_count) / (1 + mu)
-            model._update_feature_log_prob(model.alpha)
+            # Train model
+            start_time = time.time()
+            model = train_user_model(X_user, y_user)
+            training_time = time.time() - start_time
+            
+            # Apply proximal term regularization
+            if round > 0:  # Skip in the first round
+                # Move model parameters closer to global parameters (proximal regularization)
+                # This simulates the L2 proximal term in FedProx
+                model.coef_ = (1 - mu) * model.coef_ + mu * global_coef
+                model.intercept_ = (1 - mu) * model.intercept_ + mu * global_intercept
             
             # Evaluate model
             user_preds = model.predict(X_test)
             accuracy = accuracy_score(y_test, user_preds)
             
+            print(f"User {i + 1} Data Size: {X_user.shape[0]} samples")
+            print(f"User {i + 1} Training Time: {training_time:.2f} seconds")
             print(f"User {i + 1} Accuracy: {accuracy * 100:.2f}%")
             
             user_models.append(model)
             user_accuracies.append(accuracy)
         
-        # Aggregation Step
+        # Aggregation Step - Average the parameters
         print("\nAggregating Models...")
-        
-        # Initialize aggregated parameters
-        num_features = X_train.shape[1]
-        num_classes = len(global_model.classes_)
-
-        
-        # Initialize with zeros
-        # agg_class_count = np.zeros(num_classes)
-        # agg_feature_count = np.zeros((num_classes, num_features))
-        agg_class_count = np.zeros_like(global_model.class_count_)
-        agg_feature_count = np.zeros_like(global_model.feature_count_)
-
         
         # Weight factors (based on data size)
         total_samples = X_train.shape[0]
         weights = [len(user_indices[i]) / total_samples for i in range(num_users)]
         
+        # Reset aggregated parameters
+        global_coef = np.zeros_like(global_model.coef_)
+        global_intercept = np.zeros_like(global_model.intercept_)
+        
         # Weighted averaging of parameters
-        for i in range(num_users):
-            agg_class_count += weights[i] * user_models[i].class_count_
-            agg_feature_count += weights[i] * user_models[i].feature_count_
+        for i, model in enumerate(user_models):
+            global_coef += weights[i] * model.coef_
+            global_intercept += weights[i] * model.intercept_
         
         # Update global model
-        global_model.class_count_ = agg_class_count
-        global_model.feature_count_ = agg_feature_count
-        global_model._update_class_log_prior()
-        global_model._update_feature_log_prob(global_model.alpha)
-        
-        # Update global parameters for next round
-        global_feature_count = global_model.feature_count_.copy()
+        global_model.coef_ = global_coef
+        global_model.intercept_ = global_intercept
         
         # Evaluate global model
         global_preds = global_model.predict(X_test)
         global_accuracy = accuracy_score(y_test, global_preds)
         
         print(f"Round {round+1} Global Model Accuracy: {global_accuracy * 100:.2f}%")
-        
-        # Clear user models for next round
-        user_models = []
-        user_accuracies = []
     
     # Final evaluation
     global_preds = global_model.predict(X_test)
@@ -240,41 +264,48 @@ def federated_learning_prox(num_users, mu=0.01):
     print("\nClassification Report for FedProx Model:")
     print(classification_report(y_test, global_preds))
     
+    # Save global model parameters
+    save_model_params(global_model, f"models/global_lr_fedprox_{num_users}_users.joblib")
+    
     # Logging
-    write_log(f"\nFedProx Learning with {num_users} Users (mu={mu}):")
+    write_log(f"\nFedProx Learning with Logistic Regression - {num_users} Users (mu={mu}):")
     write_log(f"Final FedProx Model Accuracy: {global_accuracy * 100:.2f}%")
     write_log("=" * 50)
     
     return global_model, global_accuracy
 
-# Classic Federated Learning - FedSGD algorithm
+# Classic Federated Learning - FedSGD algorithm with Logistic Regression
 def federated_learning_sgd(num_users):
     print(f"\n{'='*50}")
-    print(f"Starting Classic FedSGD Learning with {num_users} users")
+    print(f"Starting FedSGD Learning with {num_users} users")
     print(f"{'='*50}")
     
     # Split data among users
     indices = np.arange(X_train.shape[0])
     user_indices = np.array_split(indices, num_users)
     
-    # Initialize a global model with minimal data
-    init_size = min(100, X_train.shape[0])
-    global_model = MultinomialNB()
-    global_model.fit(X_train[:init_size], y_train[:init_size])
+    # Initialize a global model
+    global_model = LogisticRegression(max_iter=100, solver='saga', random_state=42)
+    global_model.fit(X_train[:100], y_train[:100])
+    
+    # Save initial global parameters
+    global_coef = global_model.coef_.copy()
+    global_intercept = global_model.intercept_.copy()
     
     # Number of communication rounds
     rounds = 3
     best_accuracy = 0
+    best_model = None
     
     for round in range(rounds):
         print(f"\n--- Round {round+1}/{rounds} ---")
         
-        # Save current global parameters
-        current_class_count = global_model.class_count_.copy()
-        current_feature_count = global_model.feature_count_.copy()
-        
-        user_updates = []
+        user_models = []
         user_accuracies = []
+        
+        # Calculate gradients (difference from global model)
+        coef_updates = []
+        intercept_updates = []
         
         # Train individual models
         for i in range(num_users):
@@ -284,27 +315,28 @@ def federated_learning_sgd(num_users):
             X_user = X_train[user_indices[i]]
             y_user = y_train[user_indices[i]]
             
-            # Train model
+            # Clone the current global model
+            model = LogisticRegression(max_iter=100, solver='saga', random_state=42)
+            model.fit(X_user[:10], y_user[:10])  # Just to initialize
+            
+            # Set parameters to current global values
+            model.coef_ = global_coef.copy()
+            model.intercept_ = global_intercept.copy()
+            
+            # Train model 
             start_time = time.time()
-            
-            # Clone the current global model parameters
-            model = MultinomialNB()
-            model.classes_ = global_model.classes_
-            model.class_count_ = current_class_count.copy()
-            model.feature_count_ = current_feature_count.copy()
-            model._update_class_log_prior()
-            model._update_feature_log_prob(model.alpha)
-            
-            # Train on local data
-            model.fit(X_user, y_user)
-            
-            # Compute update (difference from current global model)
-            class_count_update = model.class_count_ - current_class_count
-            feature_count_update = model.feature_count_ - current_feature_count
-            
+            model = train_user_model(X_user, y_user)
             training_time = time.time() - start_time
             
-            # Evaluate individual model
+            # Calculate update (difference from global model)
+            coef_update = model.coef_ - global_coef
+            intercept_update = model.intercept_ - global_intercept
+            
+            # Store updates
+            coef_updates.append(coef_update)
+            intercept_updates.append(intercept_update)
+            
+            # Evaluate model
             user_preds = model.predict(X_test)
             accuracy = accuracy_score(y_test, user_preds)
             
@@ -312,21 +344,24 @@ def federated_learning_sgd(num_users):
             print(f"User {i + 1} Training Time: {training_time:.2f} seconds")
             print(f"User {i + 1} Accuracy: {accuracy * 100:.2f}%")
             
-            # Store the update
-            user_updates.append((class_count_update, feature_count_update))
+            user_models.append(model)
             user_accuracies.append(accuracy)
         
-        # Aggregation step - Average updates and apply to global model
+        # Aggregation Step - Apply average updates to global model
         print("\nAggregating Client Updates...")
         
-        # Apply average of all updates to global model
-        for class_update, feature_update in user_updates:
-            global_model.class_count_ += class_update / num_users
-            global_model.feature_count_ += feature_update / num_users
+        # Weight factors (based on data size)
+        total_samples = X_train.shape[0]
+        weights = [len(user_indices[i]) / total_samples for i in range(num_users)]
         
-        # Update derived parameters
-        global_model._update_class_log_prior()
-        global_model._update_feature_log_prob(global_model.alpha)
+        # Apply weighted updates to global model
+        for i in range(num_users):
+            global_coef += weights[i] * coef_updates[i]
+            global_intercept += weights[i] * intercept_updates[i]
+        
+        # Update global model parameters
+        global_model.coef_ = global_coef
+        global_model.intercept_ = global_intercept
         
         # Evaluate global model
         global_preds = global_model.predict(X_test)
@@ -337,10 +372,14 @@ def federated_learning_sgd(num_users):
         # Save best model
         if global_accuracy > best_accuracy:
             best_accuracy = global_accuracy
-            save_model_params(global_model, f"global_model_params_fedsgd_{num_users}_users_best.pkl")
+            best_model = global_model
+            save_model_params(global_model, f"models/global_lr_fedsgd_{num_users}_users_best.joblib")
     
-    # Final evaluation with best model
-    print(f"\nFinal FedSGD Model Accuracy: {best_accuracy * 100:.2f}%")
+    # Final evaluation
+    global_preds = global_model.predict(X_test)
+    global_accuracy = accuracy_score(y_test, global_preds)
+    
+    print(f"\nFinal FedSGD Model Accuracy: {global_accuracy * 100:.2f}%")
     print("\nClassification Report for FedSGD Model:")
     print(classification_report(y_test, global_preds))
     
@@ -349,22 +388,25 @@ def federated_learning_sgd(num_users):
     model_info(global_model)
     
     # Save final model parameters
-    save_model_params(global_model, f"global_model_params_fedsgd_{num_users}_users.pkl")
+    save_model_params(global_model, f"models/global_lr_fedsgd_{num_users}_users.joblib")
     
     # Logging
-    write_log(f"\nClassic FedSGD Learning with {num_users} Users:")
+    write_log(f"\nClassic FedSGD Learning with Logistic Regression - {num_users} Users:")
     for i in range(num_users):
         write_log(f"User {i + 1} Accuracy: {user_accuracies[i] * 100:.2f}%")
-    write_log(f"Final FedSGD Model Accuracy: {best_accuracy * 100:.2f}%")
+    write_log(f"Final FedSGD Model Accuracy: {global_accuracy * 100:.2f}%")
     write_log("=" * 50)
     
-    return global_model, best_accuracy
+    return global_model, global_accuracy
 
 # Main execution
 if __name__ == "__main__":
+    # Create directory for models
+    os.makedirs("models", exist_ok=True)
+    
     # Clear log file
     with open(log_file, "w") as f:
-        f.write("Federated Learning Experiments\n")
+        f.write("Federated Learning Experiments with Logistic Regression\n")
         f.write("=" * 50 + "\n")
     
     # Fetch dataset
@@ -403,8 +445,8 @@ if __name__ == "__main__":
         federated_learning_prox(num_users)
     
     # Run Classic FedSGD
-    print("\nRunning Classic FedSGD algorithm...")
+    print("\nRunning FedSGD algorithm...")
     for num_users in user_configs:
         federated_learning_sgd(num_users)
     
-    print("\nTraining complete. Logs saved to 'federated_learning_logs.txt'.")
+    print("\nTraining complete. Logs saved to 'federated_learning_logs_rg.txt'.")

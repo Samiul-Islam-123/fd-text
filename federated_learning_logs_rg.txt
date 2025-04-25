@@ -1,0 +1,132 @@
+Federated Learning Experiments with Logistic Regression
+==================================================
+
+Federated Learning with Logistic Regression - 3 Users:
+User 1 Accuracy: 59.55%
+User 2 Accuracy: 53.77%
+User 3 Accuracy: 48.36%
+Final Aggregated Model Accuracy: 58.09%
+==================================================
+
+Federated Learning with Logistic Regression - 5 Users:
+User 1 Accuracy: 54.19%
+User 2 Accuracy: 52.89%
+User 3 Accuracy: 48.20%
+User 4 Accuracy: 42.71%
+User 5 Accuracy: 39.97%
+Final Aggregated Model Accuracy: 57.69%
+==================================================
+
+Federated Learning with Logistic Regression - 7 Users:
+User 1 Accuracy: 51.72%
+User 2 Accuracy: 46.98%
+User 3 Accuracy: 74.14%
+User 4 Accuracy: 42.94%
+User 5 Accuracy: 42.92%
+User 6 Accuracy: 43.79%
+User 7 Accuracy: 37.14%
+Final Aggregated Model Accuracy: 74.69%
+==================================================
+
+Federated Learning with Logistic Regression - 9 Users:
+User 1 Accuracy: 50.48%
+User 2 Accuracy: 70.95%
+User 3 Accuracy: 36.10%
+User 4 Accuracy: 72.39%
+User 5 Accuracy: 33.87%
+User 6 Accuracy: 40.90%
+User 7 Accuracy: 34.56%
+User 8 Accuracy: 43.74%
+User 9 Accuracy: 67.24%
+Final Aggregated Model Accuracy: 75.54%
+==================================================
+
+Federated Learning with Logistic Regression - 11 Users:
+User 1 Accuracy: 70.37%
+User 2 Accuracy: 38.04%
+User 3 Accuracy: 31.80%
+User 4 Accuracy: 66.29%
+User 5 Accuracy: 70.08%
+User 6 Accuracy: 67.96%
+User 7 Accuracy: 38.65%
+User 8 Accuracy: 70.53%
+User 9 Accuracy: 27.61%
+User 10 Accuracy: 39.26%
+User 11 Accuracy: 64.93%
+Final Aggregated Model Accuracy: 75.49%
+==================================================
+
+FedProx Learning with Logistic Regression - 3 Users (mu=0.01):
+Final FedProx Model Accuracy: 58.06%
+==================================================
+
+FedProx Learning with Logistic Regression - 5 Users (mu=0.01):
+Final FedProx Model Accuracy: 57.69%
+==================================================
+
+FedProx Learning with Logistic Regression - 7 Users (mu=0.01):
+Final FedProx Model Accuracy: 74.64%
+==================================================
+
+FedProx Learning with Logistic Regression - 9 Users (mu=0.01):
+Final FedProx Model Accuracy: 75.54%
+==================================================
+
+FedProx Learning with Logistic Regression - 11 Users (mu=0.01):
+Final FedProx Model Accuracy: 75.49%
+==================================================
+
+Classic FedSGD Learning with Logistic Regression - 3 Users:
+User 1 Accuracy: 59.58%
+User 2 Accuracy: 53.79%
+User 3 Accuracy: 48.36%
+Final FedSGD Model Accuracy: 58.04%
+==================================================
+
+Classic FedSGD Learning with Logistic Regression - 5 Users:
+User 1 Accuracy: 54.16%
+User 2 Accuracy: 52.92%
+User 3 Accuracy: 48.17%
+User 4 Accuracy: 42.65%
+User 5 Accuracy: 40.00%
+Final FedSGD Model Accuracy: 57.69%
+==================================================
+
+Classic FedSGD Learning with Logistic Regression - 7 Users:
+User 1 Accuracy: 51.78%
+User 2 Accuracy: 46.98%
+User 3 Accuracy: 74.16%
+User 4 Accuracy: 42.92%
+User 5 Accuracy: 42.92%
+User 6 Accuracy: 43.77%
+User 7 Accuracy: 37.16%
+Final FedSGD Model Accuracy: 74.67%
+==================================================
+
+Classic FedSGD Learning with Logistic Regression - 9 Users:
+User 1 Accuracy: 50.50%
+User 2 Accuracy: 70.93%
+User 3 Accuracy: 36.10%
+User 4 Accuracy: 72.36%
+User 5 Accuracy: 33.87%
+User 6 Accuracy: 40.90%
+User 7 Accuracy: 34.59%
+User 8 Accuracy: 43.77%
+User 9 Accuracy: 67.29%
+Final FedSGD Model Accuracy: 75.54%
+==================================================
+
+Classic FedSGD Learning with Logistic Regression - 11 Users:
+User 1 Accuracy: 70.34%
+User 2 Accuracy: 38.04%
+User 3 Accuracy: 31.80%
+User 4 Accuracy: 66.29%
+User 5 Accuracy: 70.13%
+User 6 Accuracy: 67.98%
+User 7 Accuracy: 38.67%
+User 8 Accuracy: 70.50%
+User 9 Accuracy: 27.61%
+User 10 Accuracy: 39.28%
+User 11 Accuracy: 64.91%
+Final FedSGD Model Accuracy: 75.52%
+==================================================
