@@ -1,97 +1,155 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder
+from scipy import sparse
 
-# Global parameters
-epochs = 5  # Number of training epochs (iterations over the user dataset)
-user_configs = [3, 5, 7, 9, 11]  # Different number of users to test
-log_file = "federated_learning_random_forest_logs.txt"
+# Config
+user_configs = [3, 5, 7, 9, 11]       # different privacy levels (#users)
+local_epochs_list = [1, 2, 3, 5, 7]   # local computation per client
 
-# Function to write logs to a file
-def write_log(message):
-    with open(log_file, "a") as f:
-        f.write(message + "\n")
-
-# Fetch dataset: 20 Newsgroups (text classification dataset)
+# Fetch dataset
+print("Loading dataset...")
 newsgroups = fetch_20newsgroups(subset='all')
 X = newsgroups.data
 y = newsgroups.target
 
-# Preprocessing: Convert text to numerical features (bag-of-words)
+# Vectorize text
 vectorizer = CountVectorizer(stop_words='english', max_features=5000)
-X = vectorizer.fit_transform(X).toarray()
+X = vectorizer.fit_transform(X)
 
 # Encode labels
 label_encoder = LabelEncoder()
 y = label_encoder.fit_transform(y)
 
-# Split dataset into train/test
+# Split dataset
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Function to create and train Random Forest model for each user
-def train_user_model(X_user, y_user):
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
+# Get number of classes for logistic regression
+n_classes = len(np.unique(y))
+
+def train_user_model_lr(X_user, y_user, local_epochs, learning_rate=0.1):
+    """
+    Train a user Logistic Regression model with local epochs.
+    Uses SGD for multiple local epochs.
+    """
+    model = LogisticRegression(
+        penalty='l2',
+        C=1.0,
+        solver='saga',
+        multi_class='multinomial',
+        max_iter=local_epochs,
+        warm_start=True,
+        random_state=42,
+        n_jobs=-1
+    )
     model.fit(X_user, y_user)
     return model
 
-# Function to perform federated learning with a specific number of users
-def federated_learning(num_users):
-    # Split data among the users
-    user_data = np.array_split(X_train, num_users)
-    user_labels = np.array_split(y_train, num_users)
+def federated_learning_lr(num_users, local_epochs):
+    """Federated averaging for Logistic Regression."""
+    indices = np.arange(X_train.shape[0])
+    user_indices = np.array_split(indices, num_users)
 
-    # Store models, accuracies, and weights
     user_models = []
-    user_accuracies = []
-
-    # Train models for each user
+    user_sample_sizes = []
+    
+    # Train local models
     for i in range(num_users):
-        print(f"\nTraining {i + 1} / {num_users} on Random Forest model...")
-        model = train_user_model(user_data[i], user_labels[i])
-        user_preds = model.predict(X_test)
-        accuracy = accuracy_score(y_test, user_preds)
-
-        print(f"User {i + 1} Random Forest Accuracy: {accuracy * 100:.2f}%")
+        X_user = X_train[user_indices[i]]
+        y_user = y_train[user_indices[i]]
+        
+        model = train_user_model_lr(X_user, y_user, local_epochs)
         user_models.append(model)
-        user_accuracies.append(accuracy)
+        user_sample_sizes.append(X_user.shape[0])
+    
+    # Federated averaging of model parameters
+    total_samples = sum(user_sample_sizes)
+    
+    # Initialize global model parameters
+    if sparse.issparse(X_train):
+        n_features = X_train.shape[1]
+    else:
+        n_features = X_train.shape[1]
+    
+    # Average the coefficients and intercepts
+    avg_coef = np.zeros((n_classes, n_features))
+    avg_intercept = np.zeros(n_classes)
+    
+    for i, model in enumerate(user_models):
+        weight = user_sample_sizes[i] / total_samples
+        avg_coef += weight * model.coef_
+        avg_intercept += weight * model.intercept_
+    
+    # Create global model
+    global_model = LogisticRegression(
+        penalty='l2',
+        C=1.0,
+        solver='saga',
+        multi_class='multinomial',
+        max_iter=100,
+        random_state=42,
+        n_jobs=-1
+    )
+    
+    # Manually set the parameters
+    global_model.coef_ = avg_coef
+    global_model.intercept_ = avg_intercept
+    global_model.classes_ = np.unique(y_train)
+    global_model.n_iter_ = np.array([local_epochs])
+    
+    return global_model
 
-    # Aggregating models (Federated Learning)
-    print("\nAggregating Random Forest model...")
+# Run experiments
+results_lr = {num_users: [] for num_users in user_configs}
 
-    # Initialize global model as the first user model
-    global_model = user_models[0]
-
-    # Calculate weighted average of user model predictions
-    global_predictions = np.zeros((len(y_test), len(label_encoder.classes_)))
-    for i in range(num_users):
-        user_model = user_models[i]
-        user_preds_proba = user_model.predict_proba(X_test)
-        global_predictions += user_preds_proba
-
-    # Average predictions from all user models
-    global_predictions /= num_users
-
-    # Choose the class with the highest average probability as the final prediction
-    final_preds = np.argmax(global_predictions, axis=1)
-
-    # Final accuracy of aggregated model
-    final_accuracy = accuracy_score(y_test, final_preds)
-    print(f"\nFinal Aggregated Random Forest Model Accuracy: {final_accuracy * 100:.2f}%")
-
-    # Write logs to file
-    write_log(f"\nFederated Learning with {num_users} Users:")
-    for i in range(num_users):
-        write_log(f"User {i + 1} Accuracy: {user_accuracies[i] * 100:.2f}%")
-    write_log(f"Final Aggregated Model Accuracy: {final_accuracy * 100:.2f}")
-    write_log("=" * 50)
-
-
-# Run federated learning for different numbers of users
 for num_users in user_configs:
-    federated_learning(num_users)
+    for local_epochs in local_epochs_list:
+        try:
+            global_model = federated_learning_lr(num_users, local_epochs)
+            preds = global_model.predict(X_test)
+            acc = accuracy_score(y_test, preds)
+            results_lr[num_users].append(acc)
+            print(f"[LR] Users={num_users}, Local Epochs={local_epochs}, Accuracy={acc:.4f}")
+        except Exception as e:
+            print(f"Error with Users={num_users}, Epochs={local_epochs}: {e}")
+            results_lr[num_users].append(0)
 
-print("\nTraining complete. Logs have been saved to 'federated_learning_logs.txt'.")
+# Plot results
+plt.figure(figsize=(10, 6))
+for num_users in user_configs:
+    plt.plot(local_epochs_list, results_lr[num_users], marker='o', label=f"{num_users} Users")
+
+plt.title("Accuracy vs Privacy Tradeoff (Federated Logistic Regression)")
+plt.xlabel("Local Epochs")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Compare with centralized baseline
+print("\nTraining centralized baseline...")
+central_model = LogisticRegression(
+    penalty='l2',
+    C=1.0,
+    solver='saga',
+    multi_class='multinomial',
+    max_iter=100,
+    random_state=42,
+    n_jobs=-1
+)
+central_model.fit(X_train, y_train)
+central_acc = accuracy_score(y_test, central_model.predict(X_test))
+print(f"Centralized Baseline Accuracy: {central_acc:.4f}")
+
+# Print summary of federated results
+print("\nFederated Learning Summary:")
+print("Users\tBest Accuracy\tLocal Epochs")
+for num_users in user_configs:
+    best_acc = max(results_lr[num_users])
+    best_epoch = local_epochs_list[np.argmax(results_lr[num_users])]
+    print(f"{num_users}\t{best_acc:.4f}\t\t{best_epoch}")
